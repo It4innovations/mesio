@@ -1,0 +1,15 @@
+# ignore hidden, temporary, built, and project files
+.*
+*~
+*.pyc
+
+# ignore generated directories
+build/*
+bin/*
+lib64/*
+
+# ignore ESPRESO results (default location)
+**/results/
+
+# ignore *.ecf files in root directory
+/*.ecf
