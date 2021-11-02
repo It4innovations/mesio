@@ -7,6 +7,7 @@ Mesio is composed from (i) the mesh builder that is able to reconstruct an unstr
  - VTK Legacy
  - XDMF
  - Netgen
+ - Neper
  - OpenFOAM (partially)
  - Abaqus (partially)
 
@@ -72,13 +73,12 @@ Our parallel loader can be utilized by third party software by provided C API. T
 int main(int argc, char **argv)
 {
 	MPI_Init(&argc, &argv);
-	int mpirank, mpisize;
-	MPI_Comm_rank(MPI_COMM_WORLD, &mpirank);
-	MPI_Comm_size(MPI_COMM_WORLD, &mpisize);
 
 	MESIO mesio;
-	MESIOInit(MPI_COMM_WORLD, 2);
-	MESIOLoad(&mesio, MESIO_ANSYS, "path_to_file", MESIO_PARMETIS, 4);
+	int verbose = 2;
+	int domains = 0;
+	MESIOInit(MPI_COMM_WORLD, verbose);
+	MESIOLoad(&mesio, MESIO_ANSYS, "path_to_file", MESIO_PARMETIS, domains);
 
 	{ // GET NODES
 		MESIOInt nhalo, offset, size, totalSize;
