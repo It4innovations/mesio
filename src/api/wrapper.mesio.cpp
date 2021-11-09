@@ -143,6 +143,15 @@ void MESIONodesDomains(
 	*domainData = info::mesh->nodes->domains->datatarray().data();
 }
 
+void MESIONodeToElements(
+	MESIO           mesio,
+	MESIOInt**      elementDistribution,
+	MESIOInt**      elementData
+)
+{
+
+}
+
 void MESIOElements(
 	MESIO           mesio,
 	MESIOInt*       offset,
@@ -183,13 +192,45 @@ void MESIOElementsBodies(
 	*body = info::mesh->elements->body->datatarray().data();
 }
 
-void MESIOElementsNeighbors(
+void MESIOElementsFaceNeighbors(
 	MESIO           mesio,
 	MESIOInt**      neighborDistribution,
 	MESIOInt**      neighborData)
 {
 	*neighborDistribution = info::mesh->elements->faceNeighbors->boundarytarray().data();
 	*neighborData = info::mesh->elements->faceNeighbors->datatarray().data();
+}
+
+void MESIOElementsEdgeNeighbors(
+	MESIO           mesio,
+	MESIOInt**      neighborDistribution,
+	MESIOInt**      neighborData
+)
+{
+	*neighborDistribution = info::mesh->elements->edgeNeighbors->boundarytarray().data();
+	*neighborData = info::mesh->elements->edgeNeighbors->datatarray().data();
+}
+
+void MESIOElementFaceList(
+	MESIO               mesio,
+	MESIOElementType    element,
+	MESIOInt**          faceDistribution,
+	MESIOInt**          faceData
+)
+{
+	*faceDistribution = info::mesh->edata[element].faceList->boundarytarray().data();
+	*faceData = info::mesh->edata[element].faceList->datatarray().data();
+}
+
+void MESIOElementEdgeList(
+	MESIO               mesio,
+	MESIOElementType    element,
+	MESIOInt**          edgeDistribution,
+	MESIOInt**          edgeData
+)
+{
+	*edgeDistribution = info::mesh->edata[element].edgeList->boundarytarray().data();
+	*edgeData = info::mesh->edata[element].edgeList->datatarray().data();
 }
 
 void MESIOElementsCounters(

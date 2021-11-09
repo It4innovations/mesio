@@ -55,7 +55,7 @@ int main(int argc, char **argv)
 
 		MESIOElements(mesio, &offset, &size, &totalSize, &type, &enodesDist, &enodesData);
 		MESIOElementsDomains(mesio, &domains);
-		MESIOElementsNeighbors(mesio, &neighDist, &neighData);
+		MESIOElementsFaceNeighbors(mesio, &neighDist, &neighData);
 
 		os << "ELEMENTS\n";
 		os << "offset, size / total size: " << offset << ", " << size << " / " << std::setw(4) << totalSize << "\n";
