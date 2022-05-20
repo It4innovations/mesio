@@ -347,15 +347,6 @@ void Mesh::partitiate(int ndomains)
 		distribution.push_back(0);
 		for (esint p = 0, offset = 0; p < ndomains; ++p, offset += psize) {
 			distribution.push_back(offset + psize);
-			std::sort(permutation.begin(), permutation.end(), [&] (esint i, esint j) {
-				auto ireg = (elements->regions->begin() + i)->data();
-				auto jreg = (elements->regions->begin() + j)->data();
-				auto cmp = memcmp(ireg, jreg, sizeof(esint) * elements->regions->edataSize());
-				if (cmp == 0) {
-					return i < j;
-				}
-				return cmp < 0;
-		});
 		}
 		_omitDecomposition = false; // only the first run
 	} else {
@@ -368,7 +359,7 @@ void Mesh::partitiate(int ndomains)
 
 	mesh::computeElementIntervals(domains, elements);
 	mesh::computeRegionsElementIntervals(elements, elementsRegions);
-	mesh::computeRegionsBoundaryIntervals(elements, domains, boundaryRegions, contactInterfaces);
+	mesh::computeRegionsBoundaryIntervals(domains, boundaryRegions, contactInterfaces);
 	eslog::checkpointln("MESH: ELEMENT REGIONS ARRANGED");
 }
 

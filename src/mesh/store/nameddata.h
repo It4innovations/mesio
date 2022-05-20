@@ -9,7 +9,6 @@ namespace mesio {
 
 struct NamedData {
 	static std::vector<std::string> coordinateSuffixes;
-	static std::vector<std::string> tensorSuffixes;
 	static std::vector<std::string> numberSuffixes;
 
 	enum class DataType {
@@ -20,7 +19,7 @@ struct NamedData {
 		TENSOR_ASYM
 	};
 
-	int dimension, updated;
+	int dimension;
 	DataType dataType;
 	std::string name;
 

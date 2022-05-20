@@ -54,33 +54,10 @@ void computeElementIntervals(const DomainStore *domains, ElementStore *elements)
 	}
 	utils::mergeThreadedUniqueData(iboundaries);
 
-	auto addregions = [&] (esint i) {
-		auto regs = (elements->regions->begin() + i)->data();
-		std::vector<int> regions;
-		for (size_t r = 1; r < elements->regions->edataSize() * sizeof(esint); ++r) {
-			esint maskOffset = r / (8 * sizeof(esint));
-			esint bit = 1 << (r % (8 * sizeof(esint)));
-			if (regs[maskOffset] & bit) {
-				regions.push_back(r);
-			}
-		}
-		if (regions.size() == 0) {
-			elements->eintervals.back().region = 0;
-		}
-		if (regions.size() == 1) {
-			elements->eintervals.back().region = regions.front();
-		}
-		if (regions.size() > 1) {
-			elements->eintervals.back().region = -1;
-			elements->eintervals.back().regions = regions;
-		}
-	};
-
 	elements->eintervals.clear();
 	elements->eintervals.push_back(ElementsInterval(0, 0));
 	elements->eintervals.back().domain = domains->offset;
 	elements->eintervals.back().code = static_cast<int>(elements->epointers->datatarray().front()->code);
-	addregions(0);
 	elements->eintervalsDistribution.push_back(0);
 	for (size_t i = 0; i < iboundaries[0].size(); i++) {
 		elements->eintervals.back().end = iboundaries[0][i];
@@ -88,7 +65,6 @@ void computeElementIntervals(const DomainStore *domains, ElementStore *elements)
 		const std::vector<esint> &edist = domains->elements;
 		elements->eintervals.back().domain = std::lower_bound(edist.begin(), edist.end(), elements->eintervals.back().begin + 1) - edist.begin() - 1 + domains->offset;
 		elements->eintervals.back().code = static_cast<int>(elements->epointers->datatarray()[elements->eintervals.back().begin]->code);
-		addregions(elements->eintervals.back().begin);
 		if ((elements->eintervals.end() - 1)->domain != (elements->eintervals.end() - 2)->domain) {
 			elements->eintervalsDistribution.push_back(elements->eintervals.size() - 1);
 		}
@@ -111,7 +87,7 @@ void computeRegionsElementIntervals(const ElementStore *elements, std::vector<El
 	eslog::checkpointln("MESH: ELEMENTS REGIONS INTERVALS COMPUTED");
 }
 
-void computeRegionsBoundaryIntervals(const ElementStore *elements, const DomainStore *domains, std::vector<BoundaryRegionStore*> &boundaryRegions, std::vector<ContactInterfaceStore*> &contactInterfaces)
+void computeRegionsBoundaryIntervals(const DomainStore *domains, std::vector<BoundaryRegionStore*> &boundaryRegions, std::vector<ContactInterfaceStore*> &contactInterfaces)
 {
 	int threads = info::env::threads;
 
@@ -122,25 +98,25 @@ void computeRegionsBoundaryIntervals(const ElementStore *elements, const DomainS
 	for (size_t r = 0; r < allRegions.size(); r++) {
 		BoundaryRegionStore *store = allRegions[r];
 		if (store->dimension) {
-			std::vector<esint> eregion(store->distribution.process.size);
+			std::vector<esint> edomain(store->distribution.process.size);
 			#pragma omp parallel for
 			for (int t = 0; t < threads; t++) {
-				auto region = eregion.begin() + store->emembership->datatarray().distribution()[t] / 2;
-				for (auto parent = store->emembership->begin(t); parent != store->emembership->end(t); ++parent, ++region) {
-					*region = std::lower_bound(elements->eintervals.begin(), elements->eintervals.end(), parent->at(0) + 1, [&] (const ElementsInterval &ei, esint e) { return ei.end < e; }) - elements->eintervals.begin();
+				auto domain = edomain.begin() + store->emembership->datatarray().distribution()[t] / 2;
+				for (auto parent = store->emembership->begin(t); parent != store->emembership->end(t); ++parent, ++domain) {
+					*domain = std::lower_bound(domains->elements.begin(), domains->elements.end(), parent->at(0) + 1) - domains->elements.begin() - 1;
 				}
 			}
 
 			std::vector<esint> permutation(store->elements->structures());
 			std::iota(permutation.begin(), permutation.end(), 0);
 			std::sort(permutation.begin(), permutation.end(), [&] (esint i, esint j) {
-				if (eregion[i] == eregion[j]) {
+				if (edomain[i] == edomain[j]) {
 					if (store->epointers->datatarray()[i]->code == store->epointers->datatarray()[j]->code) {
 						return store->emembership->datatarray()[2 * i] < store->emembership->datatarray()[2 * j];
 					}
 					return store->epointers->datatarray()[i]->code < store->epointers->datatarray()[j]->code;
 				}
-				return eregion[i] < eregion[j];
+				return edomain[i] < edomain[j];
 			});
 
 			store->eintervals.clear();
@@ -149,23 +125,23 @@ void computeRegionsBoundaryIntervals(const ElementStore *elements, const DomainS
 				auto dend = domains->distribution.begin() + 1;
 				esint begin = 0;
 				for (auto prev = permutation.begin(), currect = prev + 1; currect != permutation.end(); prev = currect++) {
-					if (eregion[*prev] != eregion[*currect] || store->epointers->datatarray()[*prev]->code != store->epointers->datatarray()[*currect]->code) {
+					if (edomain[*prev] != edomain[*currect] || store->epointers->datatarray()[*prev]->code != store->epointers->datatarray()[*currect]->code) {
 						store->eintervals.push_back(ElementsInterval(begin, currect - permutation.begin()));
 						store->eintervals.back().code = static_cast<int>(store->epointers->datatarray()[*prev]->code);
-						store->eintervals.back().domain = elements->eintervals[eregion[*prev]].domain;
+						store->eintervals.back().domain = edomain[*prev];
 						begin = currect - permutation.begin();
 					}
-					if (eregion[*prev] != eregion[*currect]) {
-						while (elements->eintervals[eregion[*currect]].domain >= (esint)*dend) {
+					if (edomain[*prev] != edomain[*currect]) {
+						while (edomain[*currect] >= (esint)*dend) {
 							distribution.push_back(currect - permutation.begin());
 							++dend;
 						}
 					}
 				}
-				distribution.resize(threads + 1, eregion.size());
-				store->eintervals.push_back(ElementsInterval(begin, eregion.size()));
+				distribution.resize(threads + 1, edomain.size());
+				store->eintervals.push_back(ElementsInterval(begin, edomain.size()));
 				store->eintervals.back().code = static_cast<int>(store->epointers->datatarray()[permutation.back()]->code);
-				store->eintervals.back().domain = elements->eintervals[eregion[permutation.back()]].domain;
+				store->eintervals.back().domain = edomain[permutation.back()];
 				store->permute(permutation, distribution);
 			}
 			store->eintervalsDistribution.resize(domains->size + 1);

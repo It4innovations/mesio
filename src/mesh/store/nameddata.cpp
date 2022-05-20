@@ -4,12 +4,11 @@
 
 using namespace mesio;
 
-std::vector<std::string> NamedData::coordinateSuffixes = { "_X", "_Y", "_Z" };
-std::vector<std::string> NamedData::tensorSuffixes = { "_XX", "_YY", "_ZZ", "_XY", "_YZ", "_XZ", "_YX", "_ZY", "ZX" };
+std::vector<std::string> NamedData::coordinateSuffixes = { "_X", "_Y", "_Z", "_XY", "_YZ", "_XZ", "_YX", "_ZY", "ZX" };
 std::vector<std::string> NamedData::numberSuffixes = { "_1ST", "_2ND", "_3RD" };
 
 NamedData::NamedData(int dimension, DataType datatype, const std::string &name)
-: dimension(dimension), updated(0), dataType(datatype), name(name), store(data)
+: dimension(dimension), dataType(datatype), name(name), store(data)
 {
 
 }
@@ -18,7 +17,6 @@ NamedData::NamedData(const char* &packedData)
 : store(data)
 {
 	utils::unpack(dimension, packedData);
-	utils::unpack(updated, packedData);
 	utils::unpack(dataType, packedData);
 	utils::unpack(name, packedData);
 	utils::unpack(data, packedData);
@@ -56,9 +54,6 @@ std::string NamedData::suffix(int index) const
 	switch (dataType) {
 	case DataType::NUMBERED:
 		return numberSuffixes[index];
-	case DataType::TENSOR_ASYM:
-	case DataType::TENSOR_SYMM:
-		return tensorSuffixes[index];
 	default:
 		return coordinateSuffixes[index];
 	}
@@ -68,7 +63,6 @@ size_t NamedData::packedSize()
 {
 	size_t packetSize = 0;
 	packetSize += utils::packedSize(dimension);
-	packetSize += utils::packedSize(updated);
 	packetSize += utils::packedSize(dataType);
 	packetSize += utils::packedSize(name);
 	packetSize += utils::packedSize(data);
@@ -78,7 +72,6 @@ size_t NamedData::packedSize()
 void NamedData::pack(char *&p)
 {
 	utils::pack(dimension, p);
-	utils::pack(updated, p);
 	utils::pack(dataType, p);
 	utils::pack(name, p);
 	utils::pack(data, p);
