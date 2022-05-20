@@ -113,6 +113,10 @@ OutputWriter::OutputWriter()
 {
 	size_t namebegin = info::config::input.path.find_last_of("/") + 1;
 	size_t nameend = info::config::input.path.find_last_of(".");
+	size_t star = info::config::input.path.find_last_of("*");
+	if (star < nameend) {
+		nameend = info::config::input.path.find_last_of(".", star);
+	}
 	_name = info::config::input.path.substr(namebegin, nameend - namebegin);
 	createOutputDirectory();
 }
