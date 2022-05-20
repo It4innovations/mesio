@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <functional>
+#include <cstddef>  // size_t
 
 namespace mesio {
 
