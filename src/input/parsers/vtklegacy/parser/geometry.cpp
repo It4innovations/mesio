@@ -86,7 +86,7 @@ VTKLegacyGeometry::Header::Header(InputFilePack &pack, const char *c)
 	if (StringCompare::caseInsensitiveEq(std::string(c, c + 5), "ASCII")) {
 		format = Format::ASCII;
 	}
-	if (StringCompare::caseInsensitiveEq(std::string(c, c + 5), "BINARY")) {
+	if (StringCompare::caseInsensitiveEq(std::string(c, c + 6), "BINARY")) {
 		format = Format::BINARY;
 	}
 	while (*c++ != '\n'); // format
