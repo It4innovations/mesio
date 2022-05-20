@@ -28,6 +28,12 @@ class VTKLegacyGeometry {
 		CELLS
 	};
 
+	enum class Datatype {
+		UNKNOWN,
+		FLOAT,
+		DOUBLE
+	};
+
 	// empty constructors are only for unpacking
 	struct Keyword {
 		size_t fileindex;
@@ -48,8 +54,9 @@ class VTKLegacyGeometry {
 
 	struct Points: public Keyword {
 		size_t nn;
+		Datatype datatype;
 
-		Points(): nn(0) {}
+		Points(): nn(0), datatype(Datatype::UNKNOWN) {}
 		Points(InputFilePack &pack, const char *c);
 	};
 
@@ -81,9 +88,6 @@ public:
 	void parse(MeshBuilder &mesh, const std::vector<std::string> &names);
 
 protected:
-	void header();
-	void scanBinary();
-	void scanASCII();
 	void parseBinary(MeshBuilder &mesh, const std::vector<std::string> &names);
 	void parseASCII(MeshBuilder &mesh, const std::vector<std::string> &names);
 

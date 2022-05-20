@@ -1,6 +1,7 @@
 
 #include "geometry.h"
 #include "wrappers/mpi/communication.h"
+#include "basis/containers/allocators.h"
 #include "basis/utilities/parser.h"
 #include "esinfo/envinfo.h"
 #include "esinfo/eslog.hpp"
@@ -86,7 +87,7 @@ VTKLegacyGeometry::Header::Header(InputFilePack &pack, const char *c)
 	if (StringCompare::caseInsensitiveEq(std::string(c, c + 5), "ASCII")) {
 		format = Format::ASCII;
 	}
-	if (StringCompare::caseInsensitiveEq(std::string(c, c + 5), "BINARY")) {
+	if (StringCompare::caseInsensitiveEq(std::string(c, c + 6), "BINARY")) {
 		format = Format::BINARY;
 	}
 	while (*c++ != '\n'); // format
@@ -98,13 +99,24 @@ VTKLegacyGeometry::Header::Header(InputFilePack &pack, const char *c)
 }
 
 VTKLegacyGeometry::Points::Points(InputFilePack &pack, const char *c)
-: Keyword(pack, c)
+: Keyword(pack, c), datatype(Datatype::UNKNOWN)
 {
 	const char *_c = c;
 	nn = strtol(c + 7, NULL, 0);
 	c += 7; // POINTS
 	c += ASCIIParser::keyend(c); // nn
+	while (ASCIIParser::isempty(c)) ++c;
+	if (StringCompare::caseInsensitiveEq(std::string(c, c + 5), "float")) {
+		datatype = Datatype::FLOAT;
+	}
+	if (StringCompare::caseInsensitiveEq(std::string(c, c + 6), "double")) {
+		datatype = Datatype::DOUBLE;
+	}
+	if (datatype == Datatype::UNKNOWN) {
+		eslog::error("VTK Legacy parser: unrecognized point format.\n");
+	}
 	c += ASCIIParser::keyend(c); // format
+	while (ASCIIParser::isempty(c)) ++c;
 	begin = offset + (c - _c);
 }
 
@@ -116,15 +128,20 @@ VTKLegacyGeometry::Cells::Cells(InputFilePack &pack, const char *c)
 	ne = strtol(c + 6, &next, 0);
 	c = next;
 	size = strtol(c, &next, 0);
-	begin = offset + (next - _c);
+	c = next;
+	while (ASCIIParser::isempty(c)) ++c;
+	begin = offset + (c - _c);
 }
 
 VTKLegacyGeometry::CellTypes::CellTypes(InputFilePack &pack, const char *c)
 : Keyword(pack, c)
 {
 	char *next;
+	const char *_c = c;
 	ne = strtol(c + 11, &next, 0);
-	begin = offset + (next - c);
+	c = next;
+	while (ASCIIParser::isempty(c)) ++c;
+	begin = offset + (c - _c);
 }
 
 VTKLegacyGeometry::Data::Data(InputFilePack &pack, DataSource source, const char *c)
@@ -138,36 +155,6 @@ VTKLegacyGeometry::VTKLegacyGeometry(InputFilePack &pack)
 : _pack(pack)
 {
 
-}
-
-void VTKLegacyGeometry::scan()
-{
-	header();
-	scanASCII();
-	scanBinary();
-}
-
-void VTKLegacyGeometry::parse(MeshBuilder &mesh, const std::vector<std::string> &names)
-{
-	parseASCII(mesh, names);
-	parseBinary(mesh, names);
-}
-
-void VTKLegacyGeometry::header()
-{
-	while (_pack.next()) {
-		if (_pack.distribution[info::mpi::rank] == 0 && _pack.distribution[info::mpi::rank + 1] != 0) {
-			_header.push_back({ _pack, _pack.begin });
-			if (_header.back().format == Format::UNKNOWN) {
-				eslog::error("VTK Legacy parser: file '%s' has unknown VTK file format.\n", _pack.paths[_pack.fileindex].c_str());
-			}
-			if (_header.back().dataset == DataSet::UNKNOWN) {
-				eslog::error("VTK Legacy parser: file '%s' unsupported DATASET TYPE.\n", _pack.paths[_pack.fileindex].c_str());
-			}
-		}
-	}
-	DistributedScanner parser;
-	parser.synchronize(_header);
 }
 
 template <typename TKeyword>
@@ -200,32 +187,22 @@ static void setend(std::vector<std::vector<size_t> > &offsets, std::vector<TKeyw
 	setend(offsets, other...);
 }
 
-void VTKLegacyGeometry::scanBinary()
+void VTKLegacyGeometry::scan()
 {
-//	DistributedParser parser;
-
+	DistributedScanner scanner;
 	while (_pack.next()) {
-		if (_header[_pack.fileindex].format == Format::BINARY) {
-			eslog::error("VTK Legacy parser: not implemented scanning of binary format.\n");
-			// parser.scan(_pack);
+		if (_pack.distribution[info::mpi::rank] == 0 && _pack.distribution[info::mpi::rank + 1] != 0) {
+			_header.push_back({ _pack, _pack.begin });
+			if (_header.back().format == Format::UNKNOWN) {
+				eslog::error("VTK Legacy parser: file '%s' has unknown VTK file format.\n", _pack.paths[_pack.fileindex].c_str());
+			}
+			if (_header.back().dataset == DataSet::UNKNOWN) {
+				eslog::error("VTK Legacy parser: file '%s' unsupported DATASET TYPE.\n", _pack.paths[_pack.fileindex].c_str());
+			}
 		}
 	}
-	// parser.synchronize(_points, _cells, _cellTypes, _pointData, _cellData);
-}
 
-void VTKLegacyGeometry::parseBinary(MeshBuilder &mesh, const std::vector<std::string> &names)
-{
-//	while (_pack.next()) {
-//		if (_header[_pack.fileindex].format == Format::BINARY) {
-//			// parse
-//		}
-//	}
-}
-
-void VTKLegacyGeometry::scanASCII()
-{
-	// TODO: fully case insensitive ???, e.g. Points, POints, etc..
-	DistributedScanner scanner;
+	scanner.synchronize(_header); // we need to synchronize header before scanning since we need to know the format
 
 	scanner.add({ "points", "POINTS" }, [&] (const char *c) { _points.push_back({_pack, c}); }, [&] (const char *c) { return 2 * Points(_pack, c).nn; });
 	scanner.add({ "cells", "CELLS" }, [&] (const char *c) { _cells.push_back({_pack, c}); }, [&] (const char *c) { return 2 * Cells(_pack, c).size; });
@@ -237,6 +214,9 @@ void VTKLegacyGeometry::scanASCII()
 		if (_header[_pack.fileindex].format == Format::ASCII) {
 			scanner.align(_pack, " \n");
 			scanner.scanlines(_pack);
+		}
+		if (_header[_pack.fileindex].format == Format::BINARY) {
+			scanner.scan(_pack);
 		}
 	}
 
@@ -255,7 +235,55 @@ void VTKLegacyGeometry::scanASCII()
 	setend(offsets, _points, _cells, _cellTypes, _pointData, _cellData);
 }
 
-void VTKLegacyGeometry::parseASCII(MeshBuilder &mesh, const std::vector<std::string> &names)
+template <typename T>
+T static swap(const T &t)
+{
+	T _t;
+	const char *c = reinterpret_cast<const char*>(&t);
+	char *_c = reinterpret_cast<char*>(&_t);
+	for (size_t i = 0; i < sizeof(T); ++i) {
+		_c[i] = c[sizeof(T) - i - 1];
+	}
+	return _t;
+}
+
+void static round(size_t &current, size_t &start, size_t chunk) {
+	if ((current - start) % chunk != 0) {
+		current += chunk - (current - start) % chunk;
+	}
+};
+
+template <typename Input, typename Output>
+void static read(const InputFilePack &_pack, VTKLegacyGeometry::Keyword &keyword, std::vector<Output> &output, size_t align)
+{
+	size_t begin = std::max(keyword.begin, _pack.distribution[info::mpi::rank]);
+	size_t end = std::min(keyword.end, _pack.distribution[info::mpi::rank + 1]);
+
+	round(begin, keyword.begin, align);
+	round(end, keyword.begin, align);
+	if (begin < end) {
+		std::vector<Input, initless_allocator<Input> > data((end - begin) / sizeof(Input));
+		memcpy(data.data(), _pack.begin + begin - _pack.distribution[info::mpi::rank], end - begin);
+		output.reserve(data.size());
+		for (size_t i = 0; i < data.size(); ++i) {
+			output.push_back(swap(data[i])); // VTK use big-endian
+		}
+	}
+}
+
+template <typename Input, typename Output>
+void static readMore(const InputFilePack &_pack, VTKLegacyGeometry::Keyword &keyword, std::vector<Output> &output, size_t align, size_t size)
+{
+	size_t end = std::min(keyword.end, _pack.distribution[info::mpi::rank + 1]);
+	round(end, keyword.begin, align);
+	std::vector<Input, initless_allocator<Input> > data(size);
+	memcpy(data.data(), _pack.begin + end - _pack.distribution[info::mpi::rank], size * sizeof(Input));
+	for (size_t i = 0; i < data.size(); ++i) {
+		output.push_back(swap(data[i])); // VTK use big-endian
+	}
+}
+
+void VTKLegacyGeometry::parse(MeshBuilder &mesh, const std::vector<std::string> &names)
 {
 	std::vector<std::vector<double> > points(_pack.size());
 	std::vector<std::vector<esint> > cells(_pack.size()), celltypes(_pack.size());
@@ -266,9 +294,21 @@ void VTKLegacyGeometry::parseASCII(MeshBuilder &mesh, const std::vector<std::str
 	while (_pack.next()) {
 		// only mandatory parts
 		// data are currently skipped
-		ASCIIParser::parse(points[_pack.fileindex], _pack, _points[_pack.fileindex].begin, _points[_pack.fileindex].end);
-		ASCIIParser::parse(cells[_pack.fileindex], _pack, _cells[_pack.fileindex].begin, _cells[_pack.fileindex].end);
-		ASCIIParser::parse(celltypes[_pack.fileindex], _pack, _cellTypes[_pack.fileindex].begin, _cellTypes[_pack.fileindex].end);
+		if (_header[_pack.fileindex].format == Format::ASCII) {
+			ASCIIParser::parse(points[_pack.fileindex], _pack, _points[_pack.fileindex].begin, _points[_pack.fileindex].end);
+			ASCIIParser::parse(cells[_pack.fileindex], _pack, _cells[_pack.fileindex].begin, _cells[_pack.fileindex].end);
+			ASCIIParser::parse(celltypes[_pack.fileindex], _pack, _cellTypes[_pack.fileindex].begin, _cellTypes[_pack.fileindex].end);
+		}
+		if (_header[_pack.fileindex].format == Format::BINARY) {
+			if (_points[_pack.fileindex].datatype == Datatype::FLOAT) {
+				read<float, double>(_pack, _points[_pack.fileindex], points[_pack.fileindex], 3 * sizeof(float));
+			}
+			if (_points[_pack.fileindex].datatype == Datatype::DOUBLE) {
+				read<double, double>(_pack, _points[_pack.fileindex], points[_pack.fileindex], 3 * sizeof(double));
+			}
+			read<int, esint>(_pack, _cells[_pack.fileindex], cells[_pack.fileindex], sizeof(int));
+			read<int, esint>(_pack, _cellTypes[_pack.fileindex], celltypes[_pack.fileindex], sizeof(int));
+		}
 
 		npoints[_pack.fileindex] = points[_pack.fileindex].size();
 		for (size_t i = 0; i < celltypes[_pack.fileindex].size(); ++i) {
@@ -321,13 +361,19 @@ void VTKLegacyGeometry::parseASCII(MeshBuilder &mesh, const std::vector<std::str
 
 	size_t csum = 0, esum = 0;
 	while (_pack.next()) {
-		size_t pbegin = (3 - (npoints[_pack.fileindex] % 3)) % 3;
-		size_t pmissing = (3 - ((points[_pack.fileindex].size() - pbegin) % 3)) % 3;
-		ASCIIParser::addmore(points[_pack.fileindex], _pack, pmissing, _points[_pack.fileindex].end);
-		ASCIIParser::addmore(cells[_pack.fileindex], _pack, mixedparser.missing[_pack.fileindex], _cells[_pack.fileindex].end);
-
-		csum += (points[_pack.fileindex].size() - pbegin) / 3;
-		esum += cells[_pack.fileindex].size();
+		if (_header[_pack.fileindex].format == Format::ASCII) {
+			size_t pbegin = (3 - (npoints[_pack.fileindex] % 3)) % 3;
+			size_t pmissing = (3 - ((points[_pack.fileindex].size() - pbegin) % 3)) % 3;
+			ASCIIParser::addmore(points[_pack.fileindex], _pack, pmissing, _points[_pack.fileindex].end);
+			ASCIIParser::addmore(cells[_pack.fileindex], _pack, mixedparser.missing[_pack.fileindex], _cells[_pack.fileindex].end);
+			csum += (points[_pack.fileindex].size() - pbegin) / 3;
+			esum += cells[_pack.fileindex].size();
+		}
+		if (_header[_pack.fileindex].format == Format::BINARY) {
+			readMore<int, esint>(_pack, _cells[_pack.fileindex], cells[_pack.fileindex], sizeof(int), mixedparser.missing[_pack.fileindex]);
+			csum += points[_pack.fileindex].size() / 3;
+			esum += cells[_pack.fileindex].size();
+		}
 	}
 
 	mesh.nIDs.reserve(csum);
@@ -378,4 +424,5 @@ void VTKLegacyGeometry::parseASCII(MeshBuilder &mesh, const std::vector<std::str
 		eidoffset += _cells[_pack.fileindex].ne;
 	}
 }
+
 
