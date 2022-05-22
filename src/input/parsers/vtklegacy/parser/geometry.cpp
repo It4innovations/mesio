@@ -106,11 +106,14 @@ VTKLegacyGeometry::Points::Points(InputFilePack &pack, const char *c)
 	c += 7; // POINTS
 	c += ASCIIParser::keyend(c); // nn
 	while (ASCIIParser::isempty(c)) ++c;
+	size_t typesize = 0;
 	if (StringCompare::caseInsensitiveEq(std::string(c, c + 5), "float")) {
 		datatype = Datatype::FLOAT;
+		typesize = sizeof(float);
 	}
 	if (StringCompare::caseInsensitiveEq(std::string(c, c + 6), "double")) {
 		datatype = Datatype::DOUBLE;
+		typesize = sizeof(double);
 	}
 	if (datatype == Datatype::UNKNOWN) {
 		eslog::error("VTK Legacy parser: unrecognized point format.\n");
@@ -118,6 +121,7 @@ VTKLegacyGeometry::Points::Points(InputFilePack &pack, const char *c)
 	c += ASCIIParser::keyend(c); // format
 	while (ASCIIParser::isempty(c)) ++c;
 	begin = offset + (c - _c);
+	end = begin + nn * 3 * typesize;
 }
 
 VTKLegacyGeometry::Cells::Cells(InputFilePack &pack, const char *c)
@@ -131,6 +135,7 @@ VTKLegacyGeometry::Cells::Cells(InputFilePack &pack, const char *c)
 	c = next;
 	while (ASCIIParser::isempty(c)) ++c;
 	begin = offset + (c - _c);
+	end = begin + size * sizeof(int);
 }
 
 VTKLegacyGeometry::CellTypes::CellTypes(InputFilePack &pack, const char *c)
@@ -142,6 +147,7 @@ VTKLegacyGeometry::CellTypes::CellTypes(InputFilePack &pack, const char *c)
 	c = next;
 	while (ASCIIParser::isempty(c)) ++c;
 	begin = offset + (c - _c);
+	end = begin + ne * sizeof(int);
 }
 
 VTKLegacyGeometry::Data::Data(InputFilePack &pack, DataSource source, const char *c)
@@ -173,18 +179,20 @@ static void addoffset(std::vector<std::vector<size_t> > &offsets, std::vector<TK
 }
 
 template <typename TKeyword>
-static void setend(std::vector<std::vector<size_t> > &offsets, std::vector<TKeyword> &keywords)
+static void setend(std::vector<std::vector<size_t> > &offsets, std::vector<VTKLegacyGeometry::Header> &header, std::vector<TKeyword> &keywords)
 {
 	for (auto keyword = keywords.begin(); keyword != keywords.end(); ++keyword) {
-		keyword->end = *std::lower_bound(offsets[keyword->fileindex].begin(), offsets[keyword->fileindex].end(), keyword->begin);
+		if (header[keyword->fileindex].format == VTKLegacyGeometry::Format::ASCII) {
+			keyword->end = *std::lower_bound(offsets[keyword->fileindex].begin(), offsets[keyword->fileindex].end(), keyword->begin);
+		}
 	}
 }
 
 template <typename TKeyword, typename ...TOther>
-static void setend(std::vector<std::vector<size_t> > &offsets, std::vector<TKeyword> &keywords, TOther& ...other)
+static void setend(std::vector<std::vector<size_t> > &offsets, std::vector<VTKLegacyGeometry::Header> &header, std::vector<TKeyword> &keywords, TOther& ...other)
 {
-	setend(offsets, keywords);
-	setend(offsets, other...);
+	setend(offsets, header, keywords);
+	setend(offsets, header, other...);
 }
 
 void VTKLegacyGeometry::scan()
@@ -232,7 +240,7 @@ void VTKLegacyGeometry::scan()
 		offsets[i].push_back(_pack.files[i]->distribution.back());
 		std::sort(offsets[i].begin(), offsets[i].end());
 	}
-	setend(offsets, _points, _cells, _cellTypes, _pointData, _cellData);
+	setend(offsets, _header, _points, _cells, _cellTypes, _pointData, _cellData);
 }
 
 template <typename T>
