@@ -6,6 +6,7 @@
 #include "esinfo/envinfo.h"
 #include "esinfo/eslog.hpp"
 #include "esinfo/mpiinfo.h"
+#include "esinfo/meshinfo.h"
 #include "mesh/element.h"
 #include "input/meshbuilder.h"
 #include "input/parsers/distributedscanner.h"
@@ -331,10 +332,12 @@ void VTKLegacyGeometry::parse(MeshBuilder &mesh, const std::vector<std::string> 
 	Communication::allReduce(_mindim.data(), mindim.data(), _pack.size(), MPI_INT, MPI_MIN);
 	Communication::allReduce(_maxdim.data(), maxdim.data(), _pack.size(), MPI_INT, MPI_MAX);
 
+	info::mesh->dimension = 0;
 	while (_pack.next()) {
 		if (mindim[_pack.fileindex] != maxdim[_pack.fileindex]) {
 			eslog::globalerror("VTK Legacy parser: not implemented parsing of a file with various elements dimension: '%s'.\n", _pack.paths[_pack.fileindex].c_str());
 		}
+		info::mesh->dimension = std::max(info::mesh->dimension, maxdim[_pack.fileindex]);
 	}
 
 	MixedElementsParser mixedparser;
