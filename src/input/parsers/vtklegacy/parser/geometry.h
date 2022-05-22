@@ -12,6 +12,7 @@ namespace mesio {
 struct MeshBuilder;
 
 class VTKLegacyGeometry {
+public:
 	enum class Format {
 		BINARY,
 		ASCII,
@@ -81,7 +82,6 @@ class VTKLegacyGeometry {
 		Data(InputFilePack &pack, DataSource source, const char *c);
 	};
 
-public:
 	VTKLegacyGeometry(InputFilePack &pack);
 
 	void scan();
